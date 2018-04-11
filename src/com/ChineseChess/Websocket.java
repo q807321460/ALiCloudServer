@@ -24,7 +24,7 @@ import javax.websocket.server.ServerEndpoint;
 public class Websocket {
 	private Session session;
 	private String player;
-	private static boolean isPlaying =false; // 是否正在游戏中
+	private static boolean isPlaying = false; // 是否正在游戏中
 	private static Map<String, Websocket> map; // 用于保存各个玩家对应的一组session，服务器主动发送数据时，会根据主机编号给该编号下的所有的session发送数据
 	static {
 		map = new HashMap<String, Websocket>();
@@ -71,18 +71,24 @@ public class Websocket {
 			messageMap = new HashMap();
 		else
 			messageMap = JsonPluginsUtil.jsonToMap(message);
+		String detail = "";
 		switch (messageMap.get("message_type").toString()) {
-			case "move": // 如果是移动棋子
-				String detail = messageMap.get("message_detail").toString();
-				System.out.println("玩家" + player + "走子：" + detail);
-				String[] strings = detail.split("-");
-				 int col = 10 - Integer.parseInt(strings[1]);
-				 int row = 11 - Integer.parseInt(strings[2]);
-				 String newDetail = String.format("\"%s-%d-%d\"", strings[0], col, row);
-				 movePiece(player, newDetail);
-				 break;
-			default:
-				break;
+		case "move": // 如果是移动棋子
+			detail = messageMap.get("message_detail").toString();
+			System.out.println("玩家" + player + "走子：" + detail);
+			String[] strings = detail.split("-");
+			// 需要将移动的坐标镜像处理
+			int col = 10 - Integer.parseInt(strings[1]);
+			int row = 11 - Integer.parseInt(strings[2]);
+			String newDetail = String.format("\"%s-%d-%d\"", strings[0], col, row);
+			movePiece(player, newDetail);
+			break;
+		case "delete": // 如果是吃掉棋子
+			detail = messageMap.get("message_detail").toString();
+			System.out.println("玩家" + player + "吃掉棋子：" + Integer.parseInt(detail));
+			deletePieces(player, detail);
+		default:
+			break;
 		}
 	}
 
@@ -107,27 +113,19 @@ public class Websocket {
 			return false;
 		}
 	}
-	
+
 	public static void startGame() throws Exception {
 		if (isPlaying)
 			return;
 		isPlaying = true;
 		List<String> keys = new ArrayList<>(map.keySet());
 		String message = "";
-		message = "{"
-				+ "\"message_type\" : \"player_type\""
-				+ " , "
-				+ "\"message_detail\" : \"red\""
-				+ "}";
+		message = "{" + "\"message_type\" : \"player_type\"" + " , " + "\"message_detail\" : \"red\"" + "}";
 		map.get(keys.get(0)).session.getBasicRemote().sendText(message);
-		message = "{"
-				+ "\"message_type\" : \"player_type\""
-				+ " , "
-				+ "\"message_detail\" : \"black\""
-				+ "}";
+		message = "{" + "\"message_type\" : \"player_type\"" + " , " + "\"message_detail\" : \"black\"" + "}";
 		map.get(keys.get(1)).session.getBasicRemote().sendText(message);
 	}
-	
+
 	public static void movePiece(String currentPlayer, String detail) throws Exception {
 		if (!isPlaying)
 			return;
@@ -136,14 +134,23 @@ public class Websocket {
 		for (String key : keys) {
 			if (key.equals(currentPlayer))
 				continue;
-			String message = "{"
-					+ "\"message_type\" : \"move\""
-					+ ","
-					+ "\"message_detail\" : " + detail
-					+ "}";
+			String message = "{" + "\"message_type\" : \"move\"" + "," + "\"message_detail\" : " + detail + "}";
+			map.get(key).session.getBasicRemote().sendText(message);
+			break;
+		}
+	}
+
+	public static void deletePieces(String currentPlayer, String detail) throws Exception {
+		if (!isPlaying)
+			return;
+		List<String> keys = new ArrayList<>(map.keySet());
+		// 发送给除当前玩家外的其他玩家
+		for (String key : keys) {
+			if (key.equals(currentPlayer))
+				continue;
+			String message = "{" + "\"message_type\" : \"delete\"" + "," + "\"message_detail\" : " + detail + "}";
 			map.get(key).session.getBasicRemote().sendText(message);
 			break;
 		}
 	}
 }
-
